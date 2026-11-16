@@ -1,21 +1,14 @@
 // ==UserScript==
-// @name         Wiki-MasterBetter Étiquettes & Marché
+// @name         Wiki-Masters-lighttool Étiquettes & Marché
 // @namespace    http://tampermonkey.net
 // @version      1.0.0
 // @description  Étiquetage en masse de la collection d'après des termes de recherche, et filtres de la liste des enchères (mise de départ, cartes possédées) sur wiki-masters.com
-// @author       Pierre Bellan (https://github.com/pbellan)
+// @author       Me (https://github.com/FCYPBA)
 // @match        https://www.wiki-masters.com/*
 // @exclude      https://www.wiki-masters.com/battle*
 // @exclude      https://www.wiki-masters.com/settings*
 // @grant        GM_addStyle
 // ==/UserScript==
-
-// Script autonome, extrait de Wiki-MasterBetter : il ne reprend que
-//   1. l'étiquetage en masse de la collection (Feature MTG), avec la modale « Gérer les étiquettes » élargie (Rule 40) ;
-//   2. les trois interrupteurs de la page « Marché » (onglet « Parcourir ») : « Mise de départ », « Atténuer
-//      possédées » et « Masquer possédées » (Feature MLM, sans la médiane des ventes ; Rule 41 pour l'atténuation).
-// Ne l'installez pas en même temps que Wiki-MasterBetter : les deux ajouteraient les mêmes éléments aux mêmes
-// endroits. Les réglages sont les mêmes (mêmes clés localStorage), donc on peut passer de l'un à l'autre.
 
 (function () {
   "use strict";

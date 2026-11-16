@@ -14,7 +14,7 @@ Il suffit de quatre étapes : définir les termes, ouvrir la sélection, laisser
 
 Sur la page Collection, ouvrez la liste **« Toutes les étiquettes »** (1), puis choisissez **« Gérer les étiquettes… »** tout en bas (2).
 
-![Liste des étiquettes, avec « Gérer les étiquettes… » en dernier](./img/1-gerer-etiquettes.png)
+![Liste des étiquettes, avec « Gérer les étiquettes… » en dernier](./1-gerer-etiquettes.png)
 
 Vos étiquettes doivent déjà exister : créez-les ici si besoin, comme d'habitude. La fenêtre est plus large qu'avant (jusqu'à 90 % de l'écran) pour que les noms longs restent lisibles.
 
@@ -28,7 +28,7 @@ louvre, versailles, panthéon
 
 Une étiquette dont le champ est vide (2) est simplement ignorée par l'étiquetage en masse. Les termes sont enregistrés au fil de la frappe, dans votre navigateur : pas de bouton « Enregistrer ». Si vous renommez une étiquette, ses termes la suivent.
 
-![La fenêtre « Gérer les étiquettes » avec un champ de termes sous chaque étiquette](./img/2-termes.png)
+![La fenêtre « Gérer les étiquettes » avec un champ de termes sous chaque étiquette](./2-termes.png)
 
 Quelques conseils pour bien choisir les termes :
 
@@ -48,11 +48,11 @@ Fermez ensuite la fenêtre (touche Échap ou clic à côté).
 
 À la fin de la barre de filtres de la collection, le script a ajouté le bouton **« Étiquetage en masse 🏷️ »** (1). Cliquez dessus.
 
-![Le bouton « Étiquetage en masse » à la fin de la barre de filtres](./img/3-bouton.png)
+![Le bouton « Étiquetage en masse » à la fin de la barre de filtres](./3-bouton.png)
 
 Si aucune étiquette n'a de termes, le bouton vous le dit et vous renvoie à l'étape 2. Sinon, une fenêtre vous laisse choisir **quoi lancer et dans quel ordre** :
 
-![La fenêtre de sélection des étiquettes à traiter](./img/4-selection.png)
+![La fenêtre de sélection des étiquettes à traiter](./4-selection.png)
 
 - **Les cases à cocher** : décochez une étiquette pour la sauter cette fois-ci (sa ligne s'estompe).
 - **La barre du haut** (1) : « Tout » et « Aucune » cochent ou décochent tout ; « Les *N* premières » ne garde que les *N* premières étiquettes de la liste (ici, 3 sur 4, la dernière est décochée).
@@ -75,7 +75,7 @@ Le bouton de la barre de filtres devient **« ⏹ Arrêter l'étiquetage »**. L
 
 Quand l'opération se termine (terminée, arrêtée ou en erreur), un panneau s'ouvre à droite : il liste, **étiquette par étiquette**, chaque carte qui vient d'être étiquetée, avec son portrait. Le titre de chaque étiquette (1) reste collé en haut pendant qu'on fait défiler ses cartes, avec leur nombre.
 
-![Le récapitulatif à droite : les cartes étiquetées, étiquette par étiquette](./img/5-recapitulatif.png)
+![Le récapitulatif à droite : les cartes étiquetées, étiquette par étiquette](./5-recapitulatif.png)
 
 C'est le moment de vérifier que les termes n'ont pas ramené de cartes indésirables. Le panneau laisse la page utilisable : **cliquez sur une carte** (2) et son nom est tapé dans la recherche de la collection ; elle apparaît dans la grille, et vous pouvez l'ouvrir et lui donner une autre étiquette. Si l'opération s'est arrêtée sur une erreur, le message est affiché en haut du panneau. Seule la croix ✕ ferme le récapitulatif.
 

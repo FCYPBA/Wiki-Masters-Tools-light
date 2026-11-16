@@ -2,7 +2,7 @@
 
 L'étiquetage en masse range votre collection à votre place. Vous indiquez, pour chaque étiquette, quelques **termes de recherche** (« louvre, versailles, panthéon » pour l'étiquette *Monument*, par exemple). Le script les cherche un par un dans votre collection et applique l'étiquette à toutes les cartes trouvées qui n'en ont pas encore.
 
-Cette fonction existe dans Wiki-MasterBetter (script complet) comme dans la [version allégée](../README.md#version-allégée). Elle se trouve sur la page **Collection** (`/collection`).
+Cette fonction se trouve sur la page **Collection** (`/collection`).
 
 > Les captures d'écran de ce tutoriel ont été prises sur une page de démonstration qui reprend la structure de la page Collection, avec des cartes fictives. Les fenêtres du script (les champs de termes, la fenêtre de sélection, le récapitulatif) sont, elles, celles du vrai script. Les couleurs et la mise en page du site peuvent différer légèrement chez vous.
 

@@ -1,14 +1,23 @@
 // ==UserScript==
-// @name         Wiki-Masters-lighttool Étiquettes & Marché
+// @name         Wiki-MasterBetter Étiquettes & Marché
 // @namespace    http://tampermonkey.net
-// @version      1.0.0
-// @description  Étiquetage en masse de la collection d'après des termes de recherche, et filtres de la liste des enchères (mise de départ, cartes possédées) sur wiki-masters.com
-// @author       Me (https://github.com/FCYPBA)
+// @version      1.1.0
+// @description  Étiquetage en masse de la collection d'après des termes de recherche, copie d'une carte en image, et filtres de la liste des enchères (mise de départ, cartes possédées) sur wiki-masters.com
+// @author       Pierre Bellan (https://github.com/pbellan)
 // @match        https://www.wiki-masters.com/*
 // @exclude      https://www.wiki-masters.com/battle*
 // @exclude      https://www.wiki-masters.com/settings*
 // @grant        GM_addStyle
+// @require      https://cdn.jsdelivr.net/npm/html-to-image@1.11.11/dist/html-to-image.js
 // ==/UserScript==
+
+// Script autonome, extrait de Wiki-MasterBetter : il ne reprend que
+//   1. l'étiquetage en masse de la collection (Feature MTG), avec la modale « Gérer les étiquettes » élargie (Rule 40) ;
+//   2. le bouton 📷 qui copie une carte comme image, au survol d'une carte (Feature CCL) ;
+//   3. les filtres de la page « Marché » (onglet « Parcourir ») : le sélecteur « Mise de départ / Tout / Enchéri », « Atténuer
+//      possédées » et « Masquer possédées » (Feature MLM, sans la médiane des ventes ; Rule 41 pour l'atténuation).
+// Ne l'installez pas en même temps que Wiki-MasterBetter : les deux ajouteraient les mêmes éléments aux mêmes
+// endroits. Les réglages sont les mêmes (mêmes clés localStorage), donc on peut passer de l'un à l'autre.
 
 (function () {
   "use strict";
@@ -108,7 +117,9 @@
   // aborts if the selection holds more cards than were clicked (a leftover selection would tag unrelated cards), or
   // if the grid is unchanged after tagging. Every failure is reported with what the script found instead.
   // Transfer: the tag manager modal also gets "Exporter les termes" / "Importer des termes" links under its title,
-  // to save the terms and the run order to a JSON file and load them on another computer (see exportMassTagSettings).
+  // to save the terms and the run order to a JSON file and load them on another computer (see exportMassTagSettings),
+  // and "Nettoyer les orphelins" to drop the terms (and run-order entries) of labels that no longer exist on the
+  // site: the labels still there are the rows of the open modal (see cleanOrphanMassTagTerms; it confirms first).
   // The button turns into a stop button while running; the filter, search field and select mode are reset at the end.
   // A recap panel then lists, label by label, every card that was tagged as a grid of portraits with their names
   // (also shown when the run was stopped or failed, with the error on top). It is docked on the right and leaves the
@@ -195,6 +206,55 @@
     return count;
   }
 
+  // Labels deleted on the site leave their terms (and their place in the run order) behind. The labels still on the
+  // site are the rows of the open modal, so that is where the cleanup runs: whatever is stored for a name that has
+  // no row is listed and, once confirmed, removed. Refuses when a row is being renamed (its name is not readable)
+  // or when no row is there yet (the list is not loaded: everything would look orphaned).
+  function cleanOrphanMassTagTerms(modal) {
+    const rows = Array.from(modal.querySelectorAll("div.rounded-xl.border"));
+    const names = rows.map(getTagManagerRowName);
+    if (!rows.length || names.includes(null)) {
+      window.alert(
+        "Impossible de comparer pour l'instant : terminez le renommage en cours, ou attendez que la liste des étiquettes soit chargée.",
+      );
+      return;
+    }
+
+    const present = new Set(names);
+    const orphans = [];
+    for (let i = 0; i < localStorage.length; i++) {
+      const key = localStorage.key(i);
+      if (!key?.startsWith(MASS_TAG_TERMS_PREFIX)) continue;
+
+      const name = key.slice(MASS_TAG_TERMS_PREFIX.length);
+      if (present.has(name)) continue;
+
+      orphans.push({ key, name, terms: parseMassTagTerms(localStorage.getItem(key)) });
+    }
+    const staleOrder = readMassTagOrder().filter((name) => !present.has(name));
+    if (!orphans.length && !staleOrder.length) {
+      window.alert("Rien à nettoyer : chaque étiquette qui a des termes existe encore.");
+      return;
+    }
+
+    const lines = orphans.map(
+      ({ name, terms }) =>
+        `• ${name} (${terms.length} terme${terms.length > 1 ? "s" : ""} : ${terms.join(", ")})`,
+    );
+    if (
+      !window.confirm(
+        `Ces étiquettes n'existent plus sur le site. Supprimer leurs termes ?\n\n${lines.join("\n") || "(aucun terme, seulement des entrées de l'ordre de traitement)"}\n\nCette action est définitive : pensez à exporter les termes avant si besoin.`,
+      )
+    )
+      return;
+
+    orphans.forEach(({ key }) => localStorage.removeItem(key));
+    writeMassTagOrder(readMassTagOrder().filter((name) => present.has(name)));
+    window.alert(
+      `${orphans.length} étiquette${orphans.length > 1 ? "s" : ""} orpheline${orphans.length > 1 ? "s" : ""} nettoyée${orphans.length > 1 ? "s" : ""}.`,
+    );
+  }
+
   function insertMassTagIoBar() {
     document.querySelectorAll(".wm-tag-manager-modal h2").forEach((heading) => {
       const modal = heading.closest(".wm-tag-manager-modal");
@@ -240,6 +300,11 @@
             }
             exportMassTagSettings();
           },
+        ),
+        makeButton(
+          "🧹 Nettoyer les orphelins",
+          "Supprime les termes (et la place dans l'ordre de traitement) des étiquettes qui n'existent plus sur le site",
+          () => cleanOrphanMassTagTerms(modal),
         ),
         makeButton(
           "⬆ Importer des termes",
@@ -1372,19 +1437,136 @@
   }
 
   // ============================================================
-  // Marketplace filters (Feature MLM's three switches, with Rule 41's dimming): on the market page (/marketplace,
+  // Feature CCL: hovering a card (div.w-72 with an h-[420px] class — the card face used in grids, pulls and modals)
+  // shows a single floating 📷 button at the top center of that card. Clicking it renders the card to a PNG (via
+  // the html-to-image library, @require'd in the header; 2x pixel ratio, hover scale removed) and puts it in the
+  // clipboard through the async Clipboard API, so it can be pasted as an image. The button lives on <body>, outside
+  // the card, so it is never part of the capture. The icon briefly turns into ⏳ while rendering, then ✅ (or ❌).
+  // Wikipedia thumbnails are fetched with CORS (the site marks them crossorigin="anonymous"); if one can't be
+  // loaded, html-to-image just leaves it blank.
+  // ============================================================
+  function watchCardImageCopyButton() {
+    GM_addStyle(`
+      .wm-copy-card-image {
+        position: fixed;
+        z-index: 2147483000;
+        display: none;
+        transform: translateX(-50%);
+        padding: 2px 8px;
+        border: none;
+        border-radius: 6px;
+        background: rgba(0, 0, 0, 0.65);
+        color: #fff;
+        font-size: 1rem;
+        cursor: pointer;
+      }
+      .wm-copy-card-image:hover {
+        background: rgba(0, 0, 0, 0.85);
+      }
+    `);
+
+    // The card face is recognized by its rarity background image (/rarity/*.webp), which is a direct child of the
+    // card's root element whatever its size (grid, pulls and modal cards don't share the same width classes)
+    const findCard = (el) => {
+      let node = el.closest ? el : el.parentElement;
+      while (node && node !== document.body) {
+        if (node.querySelector(':scope > img[src*="/rarity/"]')) return node;
+        node = node.parentElement;
+      }
+      return null;
+    };
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "wm-copy-card-image";
+    btn.textContent = "📷";
+    btn.title = "Copier la carte comme image";
+    // Re-attached on demand: the site's own rendering may drop nodes it doesn't know from <body>
+    const ensureAttached = () => {
+      if (!btn.isConnected) document.body.append(btn);
+    };
+    ensureAttached();
+
+    let currentCard = null;
+    const hide = () => {
+      btn.style.display = "none";
+      currentCard = null;
+    };
+    const place = (card) => {
+      const rect = card.getBoundingClientRect();
+      btn.style.left = `${rect.left + rect.width / 2}px`;
+      btn.style.top = `${rect.top + 6}px`;
+      btn.style.display = "block";
+      currentCard = card;
+    };
+
+    document.addEventListener("mouseover", (event) => {
+      if (event.target === btn) return;
+      ensureAttached();
+      const card = findCard(event.target);
+      if (card) place(card);
+      else if (currentCard) hide();
+    }, true);
+    window.addEventListener("scroll", hide, true);
+
+    const flash = (icon) => {
+      btn.textContent = icon;
+      setTimeout(() => {
+        btn.textContent = "📷";
+      }, 1200);
+    };
+
+    btn.addEventListener("click", (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const card = currentCard;
+      if (!card || typeof htmlToImage === "undefined" || !navigator.clipboard?.write) {
+        flash("❌");
+        return;
+      }
+
+      btn.textContent = "⏳";
+      // The blob is handed over as a promise so the clipboard write happens inside the click's user gesture
+      // html-to-image logs one console error per cross-origin stylesheet it can't read while embedding fonts:
+      // harmless noise, filtered out (only that message, only during the capture)
+      const originalConsoleError = console.error;
+      console.error = (...args) => {
+        if (/Error while reading CSS rules|Error inlining remote css file/.test(String(args[0]))) return;
+        originalConsoleError.apply(console, args);
+      };
+      const blobPromise = htmlToImage
+        .toBlob(card, {
+          pixelRatio: 2,
+          style: { transform: "none", margin: "0" },
+        })
+        .finally(() => {
+          console.error = originalConsoleError;
+        });
+      navigator.clipboard
+        .write([new ClipboardItem({ "image/png": blobPromise })])
+        .then(() => flash("✅"))
+        .catch((error) => {
+          console.error("[WMB-CCL]", error);
+          flash("❌");
+        });
+    });
+  }
+
+  // ============================================================
+  // Marketplace filters (Feature MLM's bid selector and two switches, with Rule 41's dimming): on the market page (/marketplace,
   // "Parcourir" tab; every card is a div[id^="marketplace-auction-"]), a bar of compact switches (short label + a
   // small version of the site's own settings switch, the explanation being in the tooltip) is put in the page header,
   // between the title block and the "Sélectionner" button — at the top of the page, outside the list, which the site
   // re-renders. On narrow screens it wraps under the title. It holds:
-  //   - "Mise de départ": hides the auctions that already have bids, keeping the ones whose card still shows the
-  //     "Mise de départ" label (a card with bids shows another label); localStorage "wm-mlm-start-only".
+  //   - "Mise de départ / Tout / Enchéri" (a three-position selector): "Mise de départ" hides the auctions that
+  //     already have bids, keeping the ones whose card still shows the "Mise de départ" label (a card with bids
+  //     shows another label); "Enchéri" does the opposite; "Tout" filters nothing. localStorage
+  //     "wm-mlm-bid-filter" ("all" by default; the former flag "wm-mlm-start-only" is read when it was never written).
   //   - "Atténuer possédées": makes the owned cards (the ones carrying the "Possédée" tag, span.bg-emerald-600/90)
   //     almost transparent, back to full visibility on hover (the "wm-owned-dimmed" class); localStorage
   //     "wm-owned-dim" (on by default).
   //   - "Masquer possédées": removes the owned cards from the view; localStorage "wm-mlm-hide-owned" (off by default).
   // Hiding is a CSS class on the card (never removing it, so React's list stays consistent); cards that appear later
-  // ("Charger la suite") are handled by the page observer. A switch that hides cards shows how many. Finished
+  // ("Charger la suite") are handled by the page observer. A filter that hides cards shows how many as a small red "−12" pill (a hidden count, not a number of auctions). Finished
   // auctions (the "Historique" and "Gagnées" tabs) are never filtered.
   // ============================================================
   const OWNED_DIM_KEY = "wm-owned-dim";
@@ -1410,7 +1592,40 @@
       // Unwritable storage: the choice just won't stick
     }
   };
-  let mlmStartOnly = mlmReadFlag(MLM_STORAGE_KEY);
+  // The bid filter: "start" (only the auctions nobody has bid on), "all" or "bid" (only the ones that have bids).
+  // It replaces the former on/off "Mise de départ" switch, whose flag (MLM_STORAGE_KEY) is still read when the new
+  // key was never written, so a saved "on" stays "start".
+  const MLM_BID_FILTER_KEY = "wm-mlm-bid-filter";
+  const MLM_BID_FILTER_MODES = [
+    [
+      "start",
+      "Mise de départ",
+      "Seulement les enchères sans mise : masque celles qui ont déjà reçu des mises",
+    ],
+    ["all", "Tout", "Toutes les enchères, avec ou sans mise"],
+    [
+      "bid",
+      "Enchéri",
+      "Seulement les enchères qui ont déjà reçu des mises : masque celles sans mise",
+    ],
+  ];
+  function mlmReadBidFilter() {
+    try {
+      const stored = localStorage.getItem(MLM_BID_FILTER_KEY);
+      if (MLM_BID_FILTER_MODES.some(([mode]) => mode === stored)) return stored;
+    } catch {
+      // Unreadable storage: the legacy flag below
+    }
+    return mlmReadFlag(MLM_STORAGE_KEY) ? "start" : "all";
+  }
+  function mlmWriteBidFilter() {
+    try {
+      localStorage.setItem(MLM_BID_FILTER_KEY, mlmBidFilter);
+    } catch {
+      // Unwritable storage: the choice just won't stick
+    }
+  }
+  let mlmBidFilter = mlmReadBidFilter();
   let mlmHideOwned = mlmReadFlag(MLM_HIDE_OWNED_KEY);
   let ownedDimEnabled = mlmReadFlag(OWNED_DIM_KEY, true);
 
@@ -1434,6 +1649,36 @@
     return Array.from(card.querySelectorAll("span.uppercase")).some(
       (span) => span.textContent.trim() === MLM_START_LABEL,
     );
+  }
+
+  // The bid filter: three segments (Mise de départ / Tout / Enchéri) in one item of the bar, the chosen one
+  // highlighted. Each segment is a radio button; clicking one selects it (and never reaches the bar's other items).
+  function mlmBuildBidFilterItem() {
+    const item = document.createElement("div");
+    item.className = "wm-mlm-item wm-mlm-seg";
+    item.dataset.wmMlm = "start";
+    item.setAttribute("role", "radiogroup");
+    item.setAttribute("aria-label", "Filtrer les enchères selon leurs mises");
+    for (const [mode, label, tip] of MLM_BID_FILTER_MODES) {
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = "wm-mlm-segbtn";
+      button.dataset.wmMlmMode = mode;
+      button.dataset.wmMlmLabel = label;
+      button.dataset.wmMlmTip = tip;
+      button.title = tip;
+      button.textContent = label;
+      button.setAttribute("role", "radio");
+      button.setAttribute("aria-checked", "false");
+      button.addEventListener("click", () => {
+        if (mlmBidFilter === mode) return;
+        mlmBidFilter = mode;
+        mlmWriteBidFilter();
+        updateMarketplaceList();
+      });
+      item.append(button);
+    }
+    return item;
   }
 
   // One compact item of the bar: a short label and a switch (the site's switch look, scaled down), the
@@ -1485,17 +1730,7 @@
       bar.className = "wm-mlm-bar";
 
       bar.append(
-        mlmBuildSwitchItem(
-          "start",
-          "Mise de départ",
-          "Mise de départ seulement : masque les enchères qui ont déjà reçu des mises",
-          "Afficher seulement les enchères sans mise",
-          () => {
-            mlmStartOnly = !mlmStartOnly;
-            mlmWriteFlag(MLM_STORAGE_KEY, mlmStartOnly);
-            updateMarketplaceList();
-          },
-        ),
+        mlmBuildBidFilterItem(),
         mlmBuildSwitchItem(
           "dim",
           "Atténuer possédées",
@@ -1528,6 +1763,40 @@
     return bar;
   }
 
+  // The number of cards a filter hides, as a small red "−12" pill after the label (nothing when zero), so it
+  // can't be mistaken for a number of auctions; the tooltip spells it out
+  function mlmSetCount(parent, hidden) {
+    let el = parent.querySelector(":scope > .wm-mlm-count");
+    if (hidden <= 0) {
+      el?.remove();
+      return;
+    }
+    if (!el) {
+      el = document.createElement("span");
+      el.className = "wm-mlm-count";
+      parent.append(el);
+    }
+    const text = `−${hidden}`;
+    if (el.textContent !== text) el.textContent = text;
+  }
+
+  // Marks the chosen segment of the bid filter; "hidden" is the number of cards it hides, shown in that segment
+  // and in its tooltip
+  function mlmSyncBidFilter(bar, hidden) {
+    const item = bar.querySelector('.wm-mlm-item[data-wm-mlm="start"]');
+    if (!item) return;
+    for (const button of item.querySelectorAll(".wm-mlm-segbtn")) {
+      const on = button.dataset.wmMlmMode === mlmBidFilter;
+      if (button.getAttribute("aria-checked") !== String(on)) {
+        button.setAttribute("aria-checked", String(on));
+      }
+      const shown = on && hidden > 0;
+      mlmSetCount(button, shown ? hidden : 0);
+      const tip = `${button.dataset.wmMlmTip}${shown ? ` (${hidden} masquée${hidden > 1 ? "s" : ""})` : ""}`;
+      if (button.title !== tip) button.title = tip;
+    }
+  }
+
   // "hidden" is the number of cards the switch hides: shown after the label and in the tooltip while it is on
   function mlmSyncItem(bar, key, on, hidden) {
     const item = bar.querySelector(`.wm-mlm-item[data-wm-mlm="${key}"]`);
@@ -1537,9 +1806,7 @@
       button.setAttribute("aria-checked", String(on));
     }
     const shown = on && hidden > 0;
-    const label = `${item.dataset.wmMlmLabel}${shown ? ` · ${hidden}` : ""}`;
-    const labelEl = item.querySelector(".wm-mlm-label");
-    if (labelEl.textContent !== label) labelEl.textContent = label;
+    mlmSetCount(item.querySelector(".wm-mlm-label"), shown ? hidden : 0);
     const tip = `${item.dataset.wmMlmTip}${shown ? ` (${hidden} masquée${hidden > 1 ? "s" : ""})` : ""}`;
     if (item.title !== tip) item.title = tip;
   }
@@ -1565,11 +1832,12 @@
       const owned = !!card.querySelector(OWNED_TAG_SELECTOR);
       let hide = false;
       if (browse && !finished) {
-        const hideNoBid = mlmStartOnly && !mlmHasStartBid(card);
+        const hideNoBid = mlmBidFilter === "start" && !mlmHasStartBid(card);
+        const hideBid = mlmBidFilter === "bid" && mlmHasStartBid(card);
         const hideOwn = mlmHideOwned && owned;
-        if (hideNoBid) noBidHidden++;
+        if (hideNoBid || hideBid) noBidHidden++;
         if (hideOwn) ownedHidden++;
-        hide = hideNoBid || hideOwn;
+        hide = hideNoBid || hideBid || hideOwn;
       }
       if (card.classList.contains("wm-mlm-hidden") !== hide) {
         card.classList.toggle("wm-mlm-hidden", hide);
@@ -1581,7 +1849,7 @@
     }
 
     if (bar) {
-      mlmSyncItem(bar, "start", mlmStartOnly, noBidHidden);
+      mlmSyncBidFilter(bar, noBidHidden);
       mlmSyncItem(bar, "dim", ownedDimEnabled, 0);
       mlmSyncItem(bar, "hide", mlmHideOwned, ownedHidden);
     }
@@ -1681,6 +1949,51 @@
       .wm-mlm-switch[aria-checked="true"] .wm-mlm-knob {
         transform: translateX(1rem);
       }
+      /* The bid filter: a segmented control (Mise de départ / Tout / Enchéri) in one item of the bar */
+      .wm-mlm-seg {
+        gap: 0.125rem;
+        padding: 0.125rem;
+        cursor: default;
+      }
+      .wm-mlm-seg:hover {
+        background: transparent;
+      }
+      .wm-mlm-segbtn {
+        padding: 0.25rem 0.625rem;
+        border: 0;
+        border-radius: 0.375rem;
+        background: transparent;
+        font: inherit;
+        color: inherit;
+        white-space: nowrap;
+        cursor: pointer;
+        transition: background-color 0.2s, color 0.2s;
+      }
+      .wm-mlm-segbtn:hover {
+        background: var(--color-surface-light);
+      }
+      .wm-mlm-segbtn[aria-checked="true"] {
+        background: var(--color-accent);
+        color: var(--color-accent-foreground);
+      }
+      .wm-mlm-segbtn:focus {
+        outline: none;
+      }
+      .wm-mlm-segbtn:focus-visible {
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--color-accent) 50%, transparent);
+      }
+      .wm-mlm-count {
+        display: inline-block;
+        margin-left: 0.375rem;
+        padding: 0 0.375rem;
+        border-radius: 999px;
+        background: #dc2626;
+        color: #fff;
+        font-size: 0.6875rem;
+        font-weight: 700;
+        line-height: 1.1rem;
+        vertical-align: 0.05em;
+      }
     `);
 
     let debounceId = null;
@@ -1706,6 +2019,7 @@
     };
     run("TMB", watchTagManagerModalWidth);
     run("MTG", watchMassTagging);
+    run("CCL", watchCardImageCopyButton);
     run("MLM", watchMarketplaceList);
   }
 

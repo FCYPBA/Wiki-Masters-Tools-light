@@ -3,7 +3,7 @@
 // @namespace    http://tampermonkey.net
 // @version      1.1.0
 // @description  Étiquetage en masse de la collection d'après des termes de recherche, copie d'une carte en image, et filtres de la liste des enchères (mise de départ, cartes possédées) sur wiki-masters.com
-// @author       Pierre Bellan (https://github.com/pbellan)
+// @author       Pedro (https://github.com/fcypba)
 // @match        https://www.wiki-masters.com/*
 // @exclude      https://www.wiki-masters.com/battle*
 // @exclude      https://www.wiki-masters.com/settings*
